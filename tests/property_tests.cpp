@@ -22,7 +22,7 @@ namespace {
 
 hegel::Settings settings() {
   hegel::Settings s;
-  s.test_cases = 500;
+  s.test_cases = 2000;
   if (const char* env = std::getenv("ADA_HEGEL_TEST_CASES")) {
     s.test_cases = std::strtoull(env, nullptr, 10);
   }
@@ -62,15 +62,15 @@ gs::Generator<std::string> interesting_fragments() {
       "xn--",
       "xn--a",
       "xn--nxasmq6b",
-      "\xc3\x9f",              // U+00DF
-      "\xc3\xa9",              // U+00E9
-      "\xe3\x80\x82",          // U+3002 ideographic full stop
-      "\xef\xbc\x8e",          // U+FF0E fullwidth full stop
-      "\xef\xbc\x91",          // U+FF11 fullwidth digit one
-      "\xe2\x80\x8d",          // U+200D zero width joiner
-      "\xc2\xad",              // U+00AD soft hyphen
-      "\xf0\x9f\x92\xa9",      // U+1F4A9
-      "\xef\xbf\xbd",          // U+FFFD
+      "\xc3\x9f",          // U+00DF
+      "\xc3\xa9",          // U+00E9
+      "\xe3\x80\x82",      // U+3002 ideographic full stop
+      "\xef\xbc\x8e",      // U+FF0E fullwidth full stop
+      "\xef\xbc\x91",      // U+FF11 fullwidth digit one
+      "\xe2\x80\x8d",      // U+200D zero width joiner
+      "\xc2\xad",          // U+00AD soft hyphen
+      "\xf0\x9f\x92\xa9",  // U+1F4A9
+      "\xef\xbf\xbd",      // U+FFFD
       "%EF%BC%91",
       "0x7f",
       "0x",
@@ -117,10 +117,10 @@ gs::Generator<std::string> chunks(size_t max) {
 
 gs::Generator<std::string> schemes() {
   return gs::one_of<std::string>({
-      gs::sampled_from<std::string>(
-          {"http", "https", "ws", "wss", "ftp", "file", "HTTP", "FiLe",
-           "javascript", "data", "blob", "mailto", "web+demo", "a", "sc",
-           "non-spec", "git+ssh"}),
+      gs::sampled_from<std::string>({"http", "https", "ws", "wss", "ftp",
+                                     "file", "HTTP", "FiLe", "javascript",
+                                     "data", "blob", "mailto", "web+demo", "a",
+                                     "sc", "non-spec", "git+ssh"}),
       gs::text({.min_size = 1, .max_size = 6, .alphabet = "abcz09+-."}),
   });
 }
@@ -131,7 +131,7 @@ gs::Generator<std::string> hosts() {
           {"example.com", "EXAMPLE.com", "a.b.c", "localhost", "127.0.0.1",
            "0x7f.1", "0177.0.0.1", "1.2.3", "1.2.3.4.5", "[::1]",
            "[0:0:0:0:0:ffff:7f00:1]", "[::127.0.0.1]", "xn--nxasmq6b.com",
-           "\xc3\x9f.de", "faß.ExAmPlE", ""}),
+           "\xc3\x9f.de", "fa\xc3\x9f.ExAmPlE", ""}),
       gs::vectors(chunk(), {.max_size = 4})
           .map([](const std::vector<std::string>& labels) {
             std::string out;
@@ -162,8 +162,9 @@ gs::Generator<std::string> structured_urls() {
     if (tc.draw(gs::booleans())) {
       out += ':';
       out += tc.draw(gs::one_of<std::string>(
-          {gs::integers<uint32_t>({.max_value = 70000})
-               .map([](uint32_t v) { return std::to_string(v); }),
+          {gs::integers<uint32_t>({.max_value = 70000}).map([](uint32_t v) {
+             return std::to_string(v);
+           }),
            chunks(1)}));
     }
     auto segments = tc.draw(gs::vectors(chunk(), {.max_size = 5}));
@@ -307,9 +308,8 @@ bool set(T& u, component c, std::string_view v) {
 }
 
 gs::Generator<component> components() {
-  return gs::sampled_from<component>(
-      std::vector<component>(std::begin(all_components),
-                             std::end(all_components)));
+  return gs::sampled_from<component>(std::vector<component>(
+      std::begin(all_components), std::end(all_components)));
 }
 
 gs::Generator<std::string> setter_values(component c) {
@@ -317,10 +317,9 @@ gs::Generator<std::string> setter_values(component c) {
     case component::href:
       return url_inputs();
     case component::protocol:
-      return gs::one_of<std::string>({schemes(), schemes().map([](auto s) {
-                                        return s + ":";
-                                      }),
-                                      chunks(2)});
+      return gs::one_of<std::string>(
+          {schemes(), schemes().map([](auto s) { return s + ":"; }),
+           chunks(2)});
     case component::host:
     case component::hostname:
       return gs::one_of<std::string>(
@@ -329,8 +328,9 @@ gs::Generator<std::string> setter_values(component c) {
            })});
     case component::port:
       return gs::one_of<std::string>(
-          {gs::integers<uint32_t>({.max_value = 70000})
-               .map([](uint32_t v) { return std::to_string(v); }),
+          {gs::integers<uint32_t>({.max_value = 70000}).map([](uint32_t v) {
+             return std::to_string(v);
+           }),
            chunks(2)});
     default:
       return chunks(4);
@@ -550,7 +550,8 @@ TEST(ParseProperties, CanParseAgreesWithParse) {
           std::string_view base_view(base_input);
           auto base = ada::parse<ada::url_aggregator>(base_input);
           bool parsed =
-              base && ada::parse<ada::url_aggregator>(input, &*base).has_value();
+              base &&
+              ada::parse<ada::url_aggregator>(input, &*base).has_value();
           ASSERT_EQ(ada::can_parse(input, &base_view), parsed);
         } else {
           ASSERT_EQ(ada::can_parse(input),
@@ -598,8 +599,8 @@ TEST(SetterProperties, SetterSequencesAgree) {
         auto b = ada::parse<ada::url>(input);
         ASSERT_EQ(bool(a), bool(b));
         tc.assume(bool(a));
-        auto steps = tc.draw("steps", gs::integers<int>({.min_value = 1,
-                                                         .max_value = 6}));
+        auto steps = tc.draw(
+            "steps", gs::integers<int>({.min_value = 1, .max_value = 6}));
         for (int i = 0; i < steps; i++) {
           auto c = tc.draw(components());
           auto value = tc.draw(setter_values(c));
@@ -626,8 +627,8 @@ TEST(SetterProperties, HrefRoundTripsAfterSetters) {
         auto input = tc.draw("input", url_inputs());
         auto a = ada::parse<ada::url_aggregator>(input);
         tc.assume(bool(a));
-        auto steps = tc.draw("steps", gs::integers<int>({.min_value = 1,
-                                                         .max_value = 4}));
+        auto steps = tc.draw(
+            "steps", gs::integers<int>({.min_value = 1, .max_value = 4}));
         for (int i = 0; i < steps; i++) {
           auto c = tc.draw(components());
           auto value = tc.draw(setter_values(c));
@@ -657,12 +658,14 @@ TEST(SetterProperties, SettingCurrentValueIsNoOp) {
         auto c = tc.draw("component", components());
         std::string before(a->get_href());
         std::string value = get(*a, c);
-        // Setting search or hash to "" removes a present-but-empty component.
+        // The getters report "" both for absent and for empty search, hash and
+        // host, and setting "" makes them empty rather than absent.
         tc.assume(!value.empty() ||
-                  (c != component::search && c != component::hash));
+                  (c != component::search && c != component::hash &&
+                   c != component::host && c != component::hostname));
         (void)set(*a, c, value);
-        ASSERT_EQ(a->get_href(), before) << "set_" << component_name(c) << "(\""
-                                         << value << "\")";
+        ASSERT_EQ(a->get_href(), before)
+            << "set_" << component_name(c) << "(\"" << value << "\")";
       },
       settings());
 }
@@ -690,9 +693,8 @@ TEST(SearchParamsProperties, AppendSerializeParseRoundTrips) {
   hegel::test(
       [](hegel::TestCase& tc) {
         auto list = tc.draw(
-            "pairs",
-            gs::vectors(gs::tuples(form_strings(), form_strings()),
-                        {.max_size = 6}));
+            "pairs", gs::vectors(gs::tuples(form_strings(), form_strings()),
+                                 {.max_size = 6}));
         ada::url_search_params params;
         pairs expected;
         for (const auto& [k, v] : list) {
@@ -724,11 +726,10 @@ TEST(SearchParamsProperties, ParseSerializeIsIdempotent) {
 TEST(SearchParamsProperties, SortIsStableByUtf16Name) {
   hegel::test(
       [](hegel::TestCase& tc) {
-        auto list = tc.draw(
-            "pairs",
-            gs::vectors(gs::tuples(gs::text({.max_size = 3}),
-                                   gs::text({.max_size = 2})),
-                        {.max_size = 8}));
+        auto list =
+            tc.draw("pairs", gs::vectors(gs::tuples(gs::text({.max_size = 3}),
+                                                    gs::text({.max_size = 2})),
+                                         {.max_size = 8}));
         ada::url_search_params params;
         pairs expected;
         for (const auto& [k, v] : list) {
@@ -800,6 +801,36 @@ TEST(IdnaProperties, ToUnicodeThenToAsciiRoundTrips) {
       settings());
 }
 
+// Labels are processed independently (Bidi aside, which a Latin label cannot
+// trigger), so appending a non-ASCII label must not change how the others are
+// handled. All-ASCII and non-ASCII inputs take different code paths.
+TEST(IdnaProperties, AppendingNonAsciiLabelIsIndependent) {
+  hegel::test(
+      [](hegel::TestCase& tc) {
+        auto host = tc.draw(
+            "host", gs::one_of<std::string>(
+                        {hosts(), gs::text({.min_size = 1,
+                                            .max_size = 12,
+                                            .alphabet = "abcxn-.019"})}));
+        tc.assume(std::all_of(host.begin(), host.end(), [](char c) {
+          return static_cast<unsigned char>(c) < 0x80;
+        }));
+        std::string ascii = ada::idna::to_ascii(host);
+        tc.assume(!ascii.empty() && ascii.back() != '.');
+        // U+00E9 encodes as xn--9ca.
+        std::string extended = ada::idna::to_ascii(host + ".\xc3\xa9");
+        ASSERT_EQ(extended, ascii + ".xn--9ca");
+        // The converse fails legitimately: "1.2.3.4.5" is an invalid IPv4
+        // address but "1.2.3.4.5.\xc3\xa9" is a domain.
+        if (host.find('[') == std::string::npos &&
+            ada::parse<ada::url_aggregator>("https://" + host + "/")) {
+          ASSERT_TRUE(ada::parse<ada::url_aggregator>("https://" + host +
+                                                      ".\xc3\xa9/"));
+        }
+      },
+      settings());
+}
+
 // The URL host parser and ada::idna must agree for special URLs with a
 // plain domain.
 TEST(IdnaProperties, HostnameIsIdempotentUnderReparse) {
@@ -818,3 +849,193 @@ TEST(IdnaProperties, HostnameIsIdempotentUnderReparse) {
       },
       settings());
 }
+
+#if ADA_INCLUDE_URL_PATTERN
+namespace {
+
+using regex_provider = ada::url_pattern_regex::std_regex_provider;
+
+std::string strip_prefix(std::string_view s, char c) {
+  if (!s.empty() && s.front() == c) s.remove_prefix(1);
+  return std::string(s);
+}
+
+std::string strip_suffix(std::string_view s, char c) {
+  if (!s.empty() && s.back() == c) s.remove_suffix(1);
+  return std::string(s);
+}
+
+gs::Generator<std::string> path_pattern_segments() {
+  return gs::one_of<std::string>({
+      gs::sampled_from<std::string>(
+          {"users", "me",    "a",      "b",         "files",   "",
+           ":id",   ":name", "*",      ":id(\\d+)", "(\\d+)",  ":id?",
+           ":x+",   ":x*",   "{a}?",   "{:id}",     "x*",      "%41",
+           "A",     "a.b",   "{a/b}?", "*.txt",     ":id.json"}),
+      gs::text({.min_size = 1, .max_size = 3, .alphabet = "ab1"}),
+  });
+}
+
+gs::Generator<std::string> path_patterns() {
+  return gs::compose([](const hegel::TestCase& tc) {
+    // Long routes exceed the trie and capture limits of url_pattern_list's
+    // fast path and exercise its sequential fallback.
+    auto max = tc.draw(gs::sampled_from<size_t>({4, 20}));
+    auto segments =
+        tc.draw(gs::vectors(path_pattern_segments(), {.max_size = max}));
+    std::string out;
+    for (const auto& s : segments) out += "/" + s;
+    if (out.empty() || tc.draw(gs::booleans())) out += "/";
+    return out;
+  });
+}
+
+gs::Generator<std::string> path_inputs() {
+  return gs::compose([](const hegel::TestCase& tc) {
+    auto segments = tc.draw(gs::vectors(
+        gs::one_of<std::string>(
+            {gs::sampled_from<std::string>({"users", "me", "a", "b", "files",
+                                            "", "42", "x.txt", "a.b", "A",
+                                            "%41", "1.json", "a.json"}),
+             gs::text({.max_size = 3, .alphabet = "ab1."})}),
+        {.max_size = 30}));
+    std::string out;
+    for (const auto& s : segments) out += "/" + s;
+    if (out.empty() || tc.draw(gs::booleans())) out += "/";
+    return out;
+  });
+}
+
+std::optional<ada::url_pattern<regex_provider>> pathname_pattern(
+    const std::string& pathname) {
+  ada::url_pattern_init init{};
+  init.protocol = "https";
+  init.hostname = "h";
+  init.pathname = pathname;
+  auto p = ada::parse_url_pattern<regex_provider>(std::move(init));
+  if (!p) return std::nullopt;
+  return std::move(*p);
+}
+
+}  // namespace
+
+// A URL matches the pattern made of its own escaped components.
+TEST(UrlPatternProperties, UrlMatchesItsEscapedComponents) {
+  hegel::test(
+      [](hegel::TestCase& tc) {
+        auto input = tc.draw("input", url_inputs());
+        auto u = ada::parse<ada::url_aggregator>(input);
+        tc.assume(bool(u));
+        using ada::url_pattern_helpers::escape_pattern_string;
+        ada::url_pattern_init init{};
+        init.protocol =
+            escape_pattern_string(strip_suffix(u->get_protocol(), ':'));
+        init.username = escape_pattern_string(u->get_username());
+        init.password = escape_pattern_string(u->get_password());
+        // Pattern hostnames are always canonicalized as special-URL hosts, so
+        // opaque hosts (which keep their case) cannot be matched literally.
+        init.hostname =
+            ada::scheme::is_special(strip_suffix(u->get_protocol(), ':'))
+                ? escape_pattern_string(u->get_hostname())
+                : "*";
+        init.port = escape_pattern_string(u->get_port());
+        init.pathname = escape_pattern_string(u->get_pathname());
+        init.search = escape_pattern_string(strip_prefix(u->get_search(), '?'));
+        init.hash = escape_pattern_string(strip_prefix(u->get_hash(), '#'));
+        auto pattern = ada::parse_url_pattern<regex_provider>(std::move(init));
+        ASSERT_TRUE(pattern) << "pattern rejected for " << u->get_href();
+        std::string_view href = u->get_href();
+        auto matched = pattern->test(href);
+        ASSERT_TRUE(matched) << u->get_href();
+        ASSERT_TRUE(*matched) << u->get_href();
+        auto exec = pattern->exec(href);
+        ASSERT_TRUE(exec && exec->has_value());
+        EXPECT_EQ((*exec)->pathname.input, u->get_pathname());
+      },
+      settings());
+}
+
+// url_pattern_list must agree with testing each pathname pattern on its own.
+TEST(UrlPatternProperties, ListAgreesWithIndividualPatterns) {
+  hegel::test(
+      [](hegel::TestCase& tc) {
+        auto sources = tc.draw(
+            "patterns",
+            gs::vectors(path_patterns(), {.min_size = 1, .max_size = 5}));
+        std::vector<std::optional<ada::url_pattern<regex_provider>>> single;
+        bool all_valid = true;
+        for (const auto& s : sources) {
+          single.push_back(pathname_pattern(s));
+          all_valid = all_valid && single.back().has_value();
+        }
+        std::vector<std::string_view> views(sources.begin(), sources.end());
+        auto list = ada::parse_url_pattern_list<regex_provider>(views);
+        ASSERT_EQ(bool(list), all_valid);
+        tc.assume(all_valid);
+
+        std::string raw;
+        if (tc.draw("instantiate_route", gs::booleans())) {
+          // Fill one route's dynamic segments to make a match likely.
+          auto route = tc.draw(gs::sampled_from<std::string>(sources));
+          size_t start = 1;
+          while (start <= route.size()) {
+            size_t end = route.find('/', start);
+            if (end == std::string::npos) end = route.size();
+            std::string seg = route.substr(start, end - start);
+            bool dynamic = seg.find_first_of(":*({") != std::string::npos;
+            raw += "/";
+            raw += dynamic ? tc.draw(gs::sampled_from<std::string>(
+                                 {"42", "a", "x.txt", "1.json", "a/b", ""}))
+                           : seg;
+            start = end + 1;
+          }
+        } else {
+          raw = tc.draw("path", path_inputs());
+        }
+        auto url = ada::parse<ada::url_aggregator>("https://h" + raw);
+        ASSERT_TRUE(url);
+        std::string path(url->get_pathname());
+        std::string href(url->get_href());
+        tc.note("canonical pathname: " + path);
+
+        auto result = list->match(path);
+        std::vector<bool> individual;
+        for (auto& p : single) {
+          std::string_view href_view(href);
+          auto r = p->test(href_view);
+          ASSERT_TRUE(r);
+          individual.push_back(*r);
+        }
+        bool any = std::find(individual.begin(), individual.end(), true) !=
+                   individual.end();
+        ASSERT_EQ(result.has_match(), any);
+        if (!result.has_match()) return;
+        auto idx = static_cast<size_t>(result.route_index);
+        ASSERT_LT(idx, sources.size());
+        ASSERT_TRUE(individual[idx]) << "route " << sources[idx];
+
+        std::string_view href_view(href);
+        auto exec = single[idx]->exec(href_view);
+        ASSERT_TRUE(exec && exec->has_value());
+        const auto& groups = (*exec)->pathname.groups;
+        const auto& names = list->group_names(idx);
+        if (result.regexp_route) {
+          ASSERT_EQ(result.regexp_groups.size(), names.size());
+          for (size_t k = 0; k < names.size(); k++) {
+            EXPECT_EQ(result.regexp_groups[k], groups.at(names[k]))
+                << "group " << names[k];
+          }
+        } else if (!result.captures_truncated) {
+          ASSERT_EQ(result.capture_count, names.size());
+          for (size_t k = 0; k < names.size(); k++) {
+            auto cap = result.captures[k];
+            EXPECT_EQ(
+                std::optional<std::string>(path.substr(cap.offset, cap.length)),
+                groups.at(names[k]))
+                << "group " << names[k];
+          }
+        }
+      },
+      settings());
+}
+#endif  // ADA_INCLUDE_URL_PATTERN
