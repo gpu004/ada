@@ -3,6 +3,7 @@
 // Every input handed to ada is valid UTF-8, as required by the public API.
 // Set ADA_HEGEL_TEST_CASES to change the number of cases per property.
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <cstdlib>
 #include <optional>
@@ -342,6 +343,26 @@ void expect_same_components(const T& a, const ada::url& b) {
   for (component c : all_components) {
     EXPECT_EQ(get(a, c), get(b, c)) << "component " << component_name(c);
   }
+}
+
+bool is_ascii(std::string_view s) {
+  return std::all_of(s.begin(), s.end(), [](char c) {
+    return static_cast<unsigned char>(c) < 0x80;
+  });
+}
+
+bool has_ace_label(std::string_view domain) {
+  size_t start = 0;
+  while (start <= domain.size()) {
+    size_t end = std::min(domain.find('.', start), domain.size());
+    std::string_view label = domain.substr(start, end - start);
+    if (label.size() >= 4 && (label[0] | 0x20) == 'x' &&
+        (label[1] | 0x20) == 'n' && label[2] == '-' && label[3] == '-') {
+      return true;
+    }
+    start = end + 1;
+  }
+  return false;
 }
 
 bool is_ascii_without_c0_or_space_controls(std::string_view s) {
@@ -796,14 +817,20 @@ TEST(IdnaProperties, ToUnicodeThenToAsciiRoundTrips) {
         std::string ascii = ada::idna::to_ascii(input);
         tc.assume(!ascii.empty());
         std::string unicode = ada::idna::to_unicode(ascii);
+        // to_unicode keeps an ACE label it cannot decode. Next to a decoded
+        // label that makes the domain non-ASCII, where the URL Standard's
+        // ASCII carve-out no longer applies and strict ToASCII rejects it.
+        tc.assume(is_ascii(unicode) || !has_ace_label(unicode));
         ASSERT_EQ(ada::idna::to_ascii(unicode), ascii) << unicode;
       },
       settings());
 }
 
-// Labels are processed independently (Bidi aside, which a Latin label cannot
-// trigger), so appending a non-ASCII label must not change how the others are
-// handled. All-ASCII and non-ASCII inputs take different code paths.
+// Without ACE labels, labels are processed independently (Bidi aside, which a
+// Latin label cannot trigger), so appending a non-ASCII label must not change
+// how the others are handled. All-ASCII and non-ASCII inputs take different
+// code paths. ACE labels are excluded because the URL Standard accepts invalid
+// ones only when the whole domain is ASCII.
 TEST(IdnaProperties, AppendingNonAsciiLabelIsIndependent) {
   hegel::test(
       [](hegel::TestCase& tc) {
@@ -812,9 +839,7 @@ TEST(IdnaProperties, AppendingNonAsciiLabelIsIndependent) {
                         {hosts(), gs::text({.min_size = 1,
                                             .max_size = 12,
                                             .alphabet = "abcxn-.019"})}));
-        tc.assume(std::all_of(host.begin(), host.end(), [](char c) {
-          return static_cast<unsigned char>(c) < 0x80;
-        }));
+        tc.assume(is_ascii(host) && !has_ace_label(host));
         std::string ascii = ada::idna::to_ascii(host);
         tc.assume(!ascii.empty() && ascii.back() != '.');
         // U+00E9 encodes as xn--9ca.
@@ -822,7 +847,13 @@ TEST(IdnaProperties, AppendingNonAsciiLabelIsIndependent) {
         ASSERT_EQ(extended, ascii + ".xn--9ca");
         // The converse fails legitimately: "1.2.3.4.5" is an invalid IPv4
         // address but "1.2.3.4.5.\xc3\xa9" is a domain.
-        if (host.find('[') == std::string::npos &&
+        // Restricted to domain characters, so that the appended label stays in
+        // the host instead of landing in a port, path or IPv6 literal.
+        bool plain = std::all_of(host.begin(), host.end(), [](char c) {
+          return std::isalnum(static_cast<unsigned char>(c)) || c == '-' ||
+                 c == '.';
+        });
+        if (plain &&
             ada::parse<ada::url_aggregator>("https://" + host + "/")) {
           ASSERT_TRUE(ada::parse<ada::url_aggregator>("https://" + host +
                                                       ".\xc3\xa9/"));
