@@ -17,6 +17,7 @@ add_subdirectory(src)
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/scripts/cmake)
 option(ADA_TESTING "Whether to build tests." OFF)
+option(ADA_HEGEL_TESTS "Whether to build the Hegel property-based tests (requires ADA_TESTING)." OFF)
 option(ADA_BENCHMARKS "Whether to build benchmarks." OFF)
 option(ADA_TOOLS "Whether to build tools." OFF)
 option(ADA_BUILD_SINGLE_HEADER_LIB "Whether to build the lib from the single-header files" OFF)
@@ -36,6 +37,14 @@ if(ADA_TESTING OR ADA_BENCHMARKS OR ADA_TOOLS OR ADA_USE_SIMDUTF)
       VERSION 1.15.2
       OPTIONS  "BUILD_GMOCK OFF" "INSTALL_GTEST OFF"
     )
+    if(ADA_HEGEL_TESTS)
+      # Downloads the prebuilt libhegel engine for this platform at configure time.
+      CPMAddPackage(
+        NAME hegel
+        GITHUB_REPOSITORY hegeldev/hegel-cpp
+        GIT_TAG v0.13.1
+      )
+    endif()
   endif()
   # We use simdjson in both the benchmarks and tests
   if(ADA_TESTING OR ADA_BENCHMARKS)
